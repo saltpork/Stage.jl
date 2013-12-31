@@ -13,16 +13,24 @@
 # limitations under the License.
 
 module Stage
-export @fwrap, @stage, @debug, @info, @warn, @error, @critical, Log, Checkpoints, Checkpoint
+export @debug, @info, @warn, @error, @critical, Log, merge, sep
+export Checkpoints, Checkpoint, global_checkpoints, fetch
+export @fwrap, @stage
 
 using Datetime
-import Base: fetch, close, write, haskey
+import Base: fetch, close, write, haskey, merge, print
 
 function dt2tm(dt :: DateTime)
   tmdt = TmStruct(second(dt), minute(dt), hour(dt), day(dt), month(dt)-1, year(dt)-1900,
                   dayofweek(dt), dayofyear(dt), 0)
   return time(tmdt)
 end
+
+# -------------------------------------------------------------------------------------------------
+# global date constants
+# -------------------------------------------------------------------------------------------------
+const ftime_format = "%Y-%m-%d %H:%M:%S"
+const date_format  = "yyyy-MM-dd HH:mm:ss"
 
 # -------------------------------------------------------------------------------------------------
 # Checkpoint stub
@@ -35,7 +43,7 @@ end
 
 function Checkpoint(line :: String)
   dstring, tstring, name, location = split(line, " ")
-  Checkpoint(dt2tm(datetime("yyyy-MM-dd HH:mm:ss", dstring * " " * tstring)), name, location)
+  Checkpoint(dt2tm(datetime(date_format, dstring * " " * tstring)), name, location)
 end
 
 function fetch(ckpt :: Checkpoint) # get the value of this checkpoint, mimic remote refs
@@ -52,7 +60,7 @@ function write{T}(file :: IO, ckpt :: Checkpoint, value :: T) # write checkpoint
   close(f)
 
   # write metadata
-  println(file, strftime("%Y-%m-%d %H:%M:%S", ckpt.date), " ", ckpt.name, " ", ckpt.location)
+  println(file, strftime(ftime_format, ckpt.date), " ", ckpt.name, " ", ckpt.location)
   flush(file)
 end
 
@@ -95,10 +103,19 @@ LOG_LEVEL = 0
 type Log
   output :: IO
 end
+Log() = Log(IOBuffer())
 
 function print(log :: Log, msg...; color = :normal, m_type = "[INFO]")
-  prefix = @sprintf("%-18s %-7s ", strftime("%Y-%m-%d %H:%M:%S", time()), m_type)
+  prefix = @sprintf("%-18s %-7s ", strftime(ftime_format, time()), m_type)
   Base.print_with_color(color, log.output, prefix, msg..., "\n")
+end
+
+sep(log :: Log) = print(log, "-" ^ 100; color = :magenta, m_type = "[SEP]")
+function merge(l1 :: Log, l2 :: Log)
+  seekstart(l2.output)
+  for l in readlines(l2.output)
+    print(l1.output, l)
+  end
 end
 
 for lvl = 1:length(LOG_LEVELS)
@@ -120,6 +137,11 @@ for lvl = 1:length(LOG_LEVELS)
 end
 
 # -------------------------------------------------------------------------------------------------
+# module globals
+# -------------------------------------------------------------------------------------------------
+global_checkpoints = Checkpoints(".ckpts")
+
+# -------------------------------------------------------------------------------------------------
 # macro that defines a function
 # -------------------------------------------------------------------------------------------------
 macro fwrap(fname, args_and_body...)
@@ -139,20 +161,24 @@ macro stage(fn)
   body = fn.args[2]
   x    = gensym()
   quote
-    function $(esc(call.args[1]))(name, $(call.args[2:end]...))
-      @info("starting stage $name")
-      try
-        $x = haskey(ckpts, name) ? ckpts[name] : $body
-        ckpts[name] = $x
+    function $(esc(call.args[1]))(name, $(call.args[2:end]...); logger = Log(), ckpts = global_checkpoints)
+      sep(logger)
+      @info(logger, @sprintf("%-60s start execution", name))
+      $x = try
+        if haskey(ckpts, name)
+          @info(logger, @sprintf("%-60s already completed [%s]", name, strftime(ftime_format, ckpts[name].date)))
+          fetch(ckpts[name])
+        else
+          xxx = $body
+          ckpts[name] = xxx
+          @info(logger, @sprintf("%-60s completed [%s]", name, strftime(ftime_format, ckpts[name].date)))
+          xxx
+        end
       catch 
-        error("Unable to execute stage $name")
+        @error(logger, "Unable to execute stage $name")
       end
-      if haskey(ckpts, name) 
-        @info("stage $name already completed on $(ckpts(name).date)")
-      else
-        @info("completed stage $name on $(ckpts(name).date)")
-      end
-      $x
+      sep(logger)
+      $x, logger
     end
   end
 end
