@@ -140,6 +140,7 @@ end
 # module globals
 # -------------------------------------------------------------------------------------------------
 global_checkpoints = Checkpoints(".ckpts")
+global_log         = Log(STDERR)
 
 # -------------------------------------------------------------------------------------------------
 # macro that defines a function
@@ -155,30 +156,64 @@ macro fwrap(fname, args_and_body...)
   end
 end
 
+# walk the AST and replace symbols A with fetch(A)
+# should make this tail recursive at some point
+function clean_remoterefs(expr, names)
+  if isa(expr, Expr)
+    if (expr.head == :call)
+      return Expr(expr.head, [expr.args[1], [ clean_remoterefs(a, names) for a in expr.args[2:end] ]... ])
+    else
+      return Expr(expr.head, [ clean_remoterefs(a, names) for a in expr.args ])
+    end
+  elseif isa(expr, Symbol)
+    return Expr(:call, [ :fetch, expr ])
+  else
+    return expr
+  end
+end
+
 macro stage(fn)
   assert(isa(fn, Expr) && fn.head == :function)
-  call = fn.args[1]
-  body = fn.args[2]
-  x    = gensym()
+
+  call  = fn.args[1]
+  body  = fn.args[2]
+  fargs = [ symbol("dead_" * string(sym) * "_beef") for sym in call.args[2:end] ]
+  block = Expr(:block, [ :($sym = fetch($(symbol("dead_" * string(sym) * "_beef")))) for sym in call.args[2:end] ]...)
+  x     = gensym()
   quote
-    function $(esc(call.args[1]))(name, $(call.args[2:end]...); logger = Log(), ckpts = global_checkpoints)
-      sep(logger)
-      @info(logger, @sprintf("%-60s start execution", name))
-      $x = try
+    #function $(esc(call.args[1]))(name, $(call.args[2:end]...); logger = Log(), ckpts = global_checkpoints)
+    function $(esc(call.args[1]))(name, $(fargs...); logger = global_log, ckpts = global_checkpoints)
+      $block
+      local_log = Log()
+      sep(local_log)
+      @info(local_log, @sprintf("%-60s start execution", name))
+      $x = 
         if haskey(ckpts, name)
-          @info(logger, @sprintf("%-60s already completed [%s]", name, strftime(ftime_format, ckpts[name].date)))
+          @info(local_log, @sprintf("%-60s already completed [%s]", name, strftime(ftime_format, ckpts[name].date)))
+          sep(local_log)
           fetch(ckpts[name])
         else
-          xxx = $body
-          ckpts[name] = xxx
-          @info(logger, @sprintf("%-60s completed [%s]", name, strftime(ftime_format, ckpts[name].date)))
-          xxx
+          res = @spawn $body
+          @schedule begin 
+            r = fetch(res)
+            if isa(r, Exception)
+              @error(local_log, @sprintf("%-60s Unable to execute", name))
+              @error(local_log, string(" - ERROR: ", r))
+            else
+              ckpts[name] = r
+              @info(local_log, @sprintf("%-60s completed [%s]", name, strftime(ftime_format, ckpts[name].date)))
+            end
+            sep(local_log)
+            merge(logger, local_log)
+          end
+          res
         end
-      catch 
-        @error(logger, "Unable to execute stage $name")
-      end
-      sep(logger)
-      $x, logger
+      # catch e
+      #   @error(local_log, "Unable to execute stage $name")
+      #   @error(local_log, string(e))
+      #   Base.show_backtrace(local_log.output, catch_backtrace()) # NOTE: not writing to logger!
+      # end
+      $x
     end
   end
 end
