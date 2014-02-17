@@ -191,6 +191,7 @@ macro stage(fn)
         if haskey(ckpts, name)
           @info(local_log, @sprintf("%-60s already completed [%s]", name, strftime(ftime_format, ckpts[name].date)))
           sep(local_log)
+          merge(logger, local_log)
           fetch(ckpts[name])
         else
           res = @spawn $body
