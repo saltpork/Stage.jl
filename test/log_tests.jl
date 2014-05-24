@@ -11,4 +11,13 @@ l = Log(STDERR)
 @timer l "test" x = 1
 @info l "x = $x"
 
+@banner l "raw printing test"
+println(l, "raw println")
+print(l, "raw print")
+print!(l, ".")
+print!(l, ".")
+print!(l, ".")
+println!(l, "")
+println(l, "new message")
+
 

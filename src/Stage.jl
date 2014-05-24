@@ -13,12 +13,12 @@
 # limitations under the License.
 
 module Stage
-export @debug, @info, @warn, @error, @critical, @timer, @sep, @banner, Log, merge
+export @debug, @info, @warn, @error, @critical, @timer, @sep, @banner, Log, merge, print, print!, println, println!
 export Checkpoints, Checkpoint, global_checkpoints, fetch
 export @fwrap, @stage
 
 using Datetime
-import Base: fetch, close, write, haskey, merge, print
+import Base: fetch, close, write, haskey, merge, print, println
 
 function dt2tm(dt :: DateTime)
   tmdt = TmStruct(second(dt), minute(dt), hour(dt), day(dt), month(dt)-1, year(dt)-1900,
@@ -105,36 +105,42 @@ type Log
 end
 Log() = Log(IOBuffer())
 
+function print!(log :: Log, msg...; color = :normal)
+  Base.print_with_color(color, log.output, [ string(x) for x in msg ]...)
+end
 function print(log :: Log, msg...; color = :normal, m_type = "[INFO]")
   prefix = @sprintf("%-18s %-7s ", strftime(ftime_format, time()), m_type)
-  Base.print_with_color(color, log.output, prefix, [ string(x) for x in msg ]..., "\n")
+  Base.print_with_color(color, log.output, prefix, [ string(x) for x in msg ]...)
 end
+println(log :: Log, msg...; color = :normal, m_type = "[INFO]") = print(log, msg..., "\n"; color = color, m_type = m_type)
+println!(log :: Log, msg...; color = :normal) = print!(log, msg..., "\n"; color = color)
+
 
 macro timer(log, name, expr)
   quote
-    print($(esc(log)), "starting ", $(esc(name)); m_type = "[START]", color = :magenta)
+    println($(esc(log)), "starting ", $(esc(name)); m_type = "[START]", color = :magenta)
     local t0 = time()
     $(esc(expr))
     local t1 = time()
-    print($(esc(log)), "finished ", $(esc(name)), @sprintf(" took [%.2f seconds]", (t1-t0)/1e9); m_type = "[END]", color = :magenta)
+    println($(esc(log)), "finished ", $(esc(name)), @sprintf(" took [%.2f seconds]", (t1-t0)/1e9); m_type = "[END]", color = :magenta)
   end
 end
 
 macro sep(log)
-  :(print($(esc(log)), "-" ^ 100; color = :bold, m_type = "[---]"))
+  :(println($(esc(log)), "-" ^ 100; color = :bold, m_type = "[---]"))
 end
 
 macro banner(log, title)
   quote
     residual = int(max(98 - length($(esc(title))), 20) / 2)
-    print($(esc(log)), "-" ^ residual, " ", $(esc(title)), " ", "-" ^ residual; color = :bold, m_type = "[TITLE]")
+    println($(esc(log)), "-" ^ residual, " ", $(esc(title)), " ", "-" ^ residual; color = :bold, m_type = "[TITLE]")
   end
 end
 
 function merge(l1 :: Log, l2 :: Log)
   seekstart(l2.output)
   for l in readlines(l2.output)
-    print(l1.output, l)
+    println(l1.output, l)
   end
 end
 
@@ -146,7 +152,7 @@ for lvl = 1:length(LOG_LEVELS)
         tag   = $("[" * uppercase(label[1:min(5, length(label))]) * "]")
         color = $col
         if LOG_LEVEL <= $level
-          :(print($(esc(log)), $(map(esc, msg)...); color = symbol($color), m_type = $tag))
+          :(println($(esc(log)), $(map(esc, msg)...); color = symbol($color), m_type = $tag))
         else
           :nothing
         end
