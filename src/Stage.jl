@@ -13,7 +13,7 @@
 # limitations under the License.
 
 module Stage
-export @debug, @info, @warn, @error, @critical, Log, merge, sep
+export @debug, @info, @warn, @error, @critical, @timer, @sep, @banner, Log, merge
 export Checkpoints, Checkpoint, global_checkpoints, fetch
 export @fwrap, @stage
 
@@ -97,7 +97,7 @@ end
 # logging stub
 # -------------------------------------------------------------------------------------------------
 # levels: 1 = debug, 2 = info, 3 = warn, 4 = error, 5 = critical, 0 = all
-const LOG_LEVELS = [ ("debug", "cyan"), ("info", "normal"), ("warn", "yellow"), ("error", "red"), ("critical", "blue") ]
+const LOG_LEVELS = [ ("debug", "cyan"), ("info", "normal"), ("warn", "yellow"), ("error", "red"), ("critical", "blue"), ("success", "green") ]
 LOG_LEVEL = 0
 
 type Log
@@ -107,10 +107,30 @@ Log() = Log(IOBuffer())
 
 function print(log :: Log, msg...; color = :normal, m_type = "[INFO]")
   prefix = @sprintf("%-18s %-7s ", strftime(ftime_format, time()), m_type)
-  Base.print_with_color(color, log.output, prefix, msg..., "\n")
+  Base.print_with_color(color, log.output, prefix, [ string(x) for x in msg ]..., "\n")
 end
 
-sep(log :: Log) = print(log, "-" ^ 100; color = :magenta, m_type = "[SEP]")
+macro timer(log, name, expr)
+  quote
+    print($(esc(log)), "starting ", $(esc(name)); m_type = "[START]", color = :magenta)
+    local t0 = time()
+    $(esc(expr))
+    local t1 = time()
+    print($(esc(log)), "finished ", $(esc(name)), @sprintf(" took [%.2f seconds]", (t1-t0)/1e9); m_type = "[END]", color = :magenta)
+  end
+end
+
+macro sep(log)
+  :(print($(esc(log)), "-" ^ 100; color = :bold, m_type = "[---]"))
+end
+
+macro banner(log, title)
+  quote
+    residual = int(max(98 - length($(esc(title))), 20) / 2)
+    print($(esc(log)), "-" ^ residual, " ", $(esc(title)), " ", "-" ^ residual; color = :bold, m_type = "[TITLE]")
+  end
+end
+
 function merge(l1 :: Log, l2 :: Log)
   seekstart(l2.output)
   for l in readlines(l2.output)
