@@ -119,9 +119,9 @@ println!(log :: Log, msg...; color = :normal) = print!(log, msg..., "\n"; color 
 macro timer(log, name, expr)
   quote
     println($(esc(log)), "starting ", $(esc(name)); m_type = "[START]", color = :magenta)
-    local t0 = time()
+    local t0 = time_ns()
     $(esc(expr))
-    local t1 = time()
+    local t1 = time_ns()
     println($(esc(log)), "finished ", $(esc(name)), @sprintf(" took [%.2f seconds]", (t1-t0)/1e9); m_type = "[END]", color = :magenta)
   end
 end
