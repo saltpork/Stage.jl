@@ -15,7 +15,9 @@
 module Stage
 export @debug, @info, @warn, @error, @critical, @timer, @sep, @banner, Log, merge, print, print!, println, println!
 export Checkpoints, Checkpoint, global_checkpoints, fetch
+export @expect
 export @fwrap, @stage
+export getfile
 
 using Datetime
 import Base: fetch, close, write, haskey, merge, print, println
@@ -115,8 +117,18 @@ end
 println(log :: Log, msg...; color = :normal, m_type = "[INFO]") = print(log, msg..., "\n"; color = color, m_type = m_type)
 println!(log :: Log, msg...; color = :normal) = print!(log, msg..., "\n"; color = color)
 
-
-macro timer(log, name, expr)
+macro timer(args...)
+  if length(args) == 3
+    log  = args[1]
+    name = args[2]
+    expr = args[3]
+  elseif length(args) == 2
+    log  = global_log
+    name = args[1]
+    expr = args[2]
+  else
+    error("timer() must be called with either 2 (string, expr) or 3 (log, string, expr) arguments")
+  end
   quote
     println($(esc(log)), "starting ", $(esc(name)); m_type = "[START]", color = :magenta)
     local t0 = time_ns()
@@ -126,14 +138,66 @@ macro timer(log, name, expr)
   end
 end
 
-macro sep(log)
+macro sep(args...)
+  if length(args) == 1
+    log  = args[1]
+  elseif length(args) == 0
+    log  = global_log
+  else
+    error("sep() must be called with either 0 () or 1 (log) arguments")
+  end
   :(println($(esc(log)), "-" ^ 100; color = :bold, m_type = "[---]"))
 end
 
-macro banner(log, title)
+macro banner(args...)
+  if length(args) == 2
+    log   = args[1]
+    title = args[2]
+  elseif length(args) == 1
+    log   = global_log
+    title = args[1]
+  else
+    error("banner() must be called with either 1 (string) or 2 (log, string) arguments")
+  end
   quote
     residual = int(max(98 - length($(esc(title))), 20) / 2)
     println($(esc(log)), "-" ^ residual, " ", $(esc(title)), " ", "-" ^ residual; color = :bold, m_type = "[TITLE]")
+  end
+end
+
+macro test_ok(args...)
+  tag   = "[TEST]"
+  color = "green"
+  if length(args) == 1
+    log = global_log
+    msg = args[1]
+  elseif length(args) == 2
+    log = args[1]
+    msg = args[2]
+  else
+    error("test_ok() must be called with either 1 (string) or 2 (log, string) arguments")
+  end
+  quote
+    residual = int(max(98 - length($(esc(msg))) - 4, 20))
+    println($(esc(log)), $(esc(msg)), " " ^ residual, "[OK]", color = symbol($color), m_type = $tag)
+  end
+end
+
+macro test_fail(args...)
+  tag   = "[TEST]"
+  color = "red"
+  if length(args) == 1
+    log = global_log
+    msg = args[1]
+  elseif length(args) == 2
+    log = args[1]
+    msg = args[2]
+  else
+    error("test_fail() must be called with either 1 (string) or 2 (log, string) arguments")
+  end
+  quote
+    residual = int(max(98 - length($(esc(msg))) - 6, 20))
+    println($(esc(log)), $(esc(msg)), " " ^ residual, "[FAIL]", color = symbol($color), m_type = $tag)
   end
 end
 
@@ -148,11 +212,20 @@ for lvl = 1:length(LOG_LEVELS)
   let level = lvl
     label, col = LOG_LEVELS[level]
     x = quote
-      macro $(symbol(label))(log, msg...)
+      macro $(symbol(label))(args...)
         tag   = $("[" * uppercase(label[1:min(5, length(label))]) * "]")
         color = $col
+        if length(args) == 1
+          log = global_log
+          msg = args[1]
+        elseif length(args) == 2
+          log = args[1]
+          msg = args[2]
+        else
+          error("$label() must be called with either 1 (string) or 2 (log, string) arguments")
+        end
         if LOG_LEVEL <= $level
-          :(println($(esc(log)), $(map(esc, msg)...); color = symbol($color), m_type = $tag))
+          :(println($(esc(log)), $(esc(msg)), color = symbol($color), m_type = $tag))
         else
           :nothing
         end
@@ -161,12 +234,6 @@ for lvl = 1:length(LOG_LEVELS)
     eval(x)
   end
 end
-
-# -------------------------------------------------------------------------------------------------
-# module globals
-# -------------------------------------------------------------------------------------------------
-global_checkpoints = Checkpoints(".ckpts")
-global_log         = Log(STDERR)
 
 # -------------------------------------------------------------------------------------------------
 # macro that defines a function
@@ -242,6 +309,58 @@ macro stage(fn)
       # end
       $x
     end
+  end
+end
+
+# -------------------------------------------------------------------------------------------------
+# module globals
+# -------------------------------------------------------------------------------------------------
+global_checkpoints = Checkpoints(".ckpts")
+global_log         = Log(STDERR)
+
+# -------------------------------------------------------------------------------------------------
+# expect and fuzzy_expect
+# -------------------------------------------------------------------------------------------------
+macro expect(args...)
+  if length(args) == 2
+    log  = args[1]
+    expr = args[2]
+  elseif length(args) == 1
+    log   = global_log
+    expr = args[1]
+  else
+    error("expect() must be called with either 1 (expr) or 2 (log, expr) arguments")
+  end
+  if expr.head != :comparison
+    error("expect() requires that its argument (expr) be a comparison")
+  end
+
+  a    = expr.args[1]
+  b    = expr.args[3]
+  nexp = Expr(:comparison, :la, expr.args[2], :lb)
+  quote
+    let la = $(esc(a)),
+        lb = $(esc(b)),
+        st = $(string(expr))
+      if $nexp
+        @test_ok $log "$st succeeded"
+      else
+        @test_fail $log "$st failed"
+        @info $log      "  + left  side: $la"
+        @info $log      "  + right side: $lb"
+      end
+    end
+  end
+end
+
+# -------------------------------------------------------------------------------------------------
+# other utilities
+# -------------------------------------------------------------------------------------------------
+function getfile(url, fn; expected_size = -1, logger = Log(STDERR))
+  if filesize(fn) != expected_size
+    @timer logger "downloading $fn from $url" download(url, fn)
+  else
+    @error logger "$fn already downloaded, using local version."
   end
 end
 
