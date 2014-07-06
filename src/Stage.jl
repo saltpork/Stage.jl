@@ -15,7 +15,7 @@
 module Stage
 export @debug, @info, @warn, @error, @critical, @timer, @sep, @banner, Log, merge, print, print!, println, println!
 export Checkpoints, Checkpoint, global_checkpoints, fetch
-export @expect
+export @expect, @approx
 export @fwrap, @stage
 export getfile
 
@@ -165,7 +165,7 @@ macro banner(args...)
   end
 end
 
-macro test_ok(args...)
+macro test_pass(args...)
   tag   = "[TEST]"
   color = "green"
   if length(args) == 1
@@ -175,11 +175,11 @@ macro test_ok(args...)
     log = args[1]
     msg = args[2]
   else
-    error("test_ok() must be called with either 1 (string) or 2 (log, string) arguments")
+    error("test_pass() must be called with either 1 (string) or 2 (log, string) arguments")
   end
   quote
-    residual = int(max(98 - length($(esc(msg))) - 4, 20))
-    println($(esc(log)), $(esc(msg)), " " ^ residual, "[OK]", color = symbol($color), m_type = $tag)
+    residual = int(max(98 - length($(esc(msg))) - 6, 20))
+    println($(esc(log)), $(esc(msg)), " " ^ residual, "[PASS]", color = symbol($color), m_type = $tag)
   end
 end
 
@@ -338,16 +338,19 @@ macro expect(args...)
   a    = expr.args[1]
   b    = expr.args[3]
   nexp = Expr(:comparison, :la, expr.args[2], :lb)
+  sexp = string(expr)
+  st   = length(sexp) > 70 ? sexp[1:min(end, 66)] * " ..." : sexp
   quote
     let la = $(esc(a)),
         lb = $(esc(b)),
-        st = $(string(expr))
+        st = $(esc(st))
       if $nexp
-        @test_ok $log "$st succeeded"
+        @test_pass $log "$st"
       else
-        @test_fail $log "$st failed"
-        @info $log      "  + left  side: $la"
-        @info $log      "  + right side: $lb"
+        @test_fail $log "$st"
+        @error $log     " + left  side: $la"
+        @error $log     " + right side: $lb"
+        error("test failed $st")
       end
     end
   end
