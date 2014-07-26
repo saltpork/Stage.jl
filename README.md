@@ -1,6 +1,4 @@
-<div style="float: right">
-<img src="https://travis-ci.org/saltpork/Stage.jl.svg?branch=master" alt="Build Status"/>
-</div>
+<img style="float:right" src="https://travis-ci.org/saltpork/Stage.jl.svg?branch=master" alt="Build Status"/>
 Stages
 ======
 
