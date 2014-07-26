@@ -1,6 +1,7 @@
-<img align=right src="https://travis-ci.org/saltpork/Stage.jl.svg?branch=master" alt="Build Status"/>
 Stages
 ======
+
+<img align=right src="https://travis-ci.org/saltpork/Stage.jl.svg?branch=master" alt="Build Status"/>
 
 This is a wrapper macro that supplies:
 
