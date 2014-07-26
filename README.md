@@ -1,5 +1,5 @@
 <div style="float: right">
-[![Build Status](https://travis-ci.org/saltpork/Stage.jl.svg?branch=master)](https://travis-ci.org/saltpork/Stage.jl)
+<img src="https://travis-ci.org/saltpork/Stage.jl.svg?branch=master" alt="Build Status"/>
 </div>
 Stages
 ======
