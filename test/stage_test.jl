@@ -21,10 +21,10 @@ res_future = add("add", mult("mult2", 1, 2), 3)
 @debug "madd result: $(fetch(res_future))"
 
 res3 = sub("s1", mult("m1", 4, 3), mult("m2", 5, 6))
-@expect res3 == -18
+@expect fetch(res3) == -18
 @debug "res3 = $(fetch(res3)) [should be -18 and should have taken approx. 4 seconds]"
 
 res4 = sub("sub2", mult("m1", 4, 3), mult("m2", 5, 6))
-@expect res4 == 8
+@expect fetch(res4) == 8
 @debug "res4 = $(fetch(res4)) [should be 8 and should have taken approx. 0 seconds]"
 @debug "completed test"

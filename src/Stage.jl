@@ -204,7 +204,7 @@ end
 function merge(l1 :: Log, l2 :: Log)
   seekstart(l2.output)
   for l in readlines(l2.output)
-    println(l1.output, l)
+    print(l1.output, l)
   end
 end
 
@@ -278,12 +278,12 @@ macro stage(fn)
     function $(esc(call.args[1]))(name, $(fargs...); logger = global_log, ckpts = global_checkpoints)
       $block
       local_log = Log()
-      sep(local_log)
+      @sep(local_log)
       @info(local_log, @sprintf("%-60s start execution", name))
       $x = 
         if haskey(ckpts, name)
           @info(local_log, @sprintf("%-60s already completed [%s]", name, strftime(ftime_format, ckpts[name].date)))
-          sep(local_log)
+          @sep(local_log)
           merge(logger, local_log)
           fetch(ckpts[name])
         else
@@ -297,7 +297,7 @@ macro stage(fn)
               ckpts[name] = r
               @info(local_log, @sprintf("%-60s completed [%s]", name, strftime(ftime_format, ckpts[name].date)))
             end
-            sep(local_log)
+            @sep(local_log)
             merge(logger, local_log)
           end
           res
