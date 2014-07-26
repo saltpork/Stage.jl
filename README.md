@@ -1,6 +1,8 @@
 Stages
 ======
 
+[![Build Status](https://travis-ci.org/saltpork/Stage.jl.svg?branch=master)](https://travis-ci.org/saltpork/Stage.jl)
+
 This is a wrapper macro that supplies:
 
 1. simple name-based memoization/checkpointing (note: not @memoize)
