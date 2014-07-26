@@ -1,7 +1,8 @@
+<div style="float: right">
+[![Build Status](https://travis-ci.org/saltpork/Stage.jl.svg?branch=master)](https://travis-ci.org/saltpork/Stage.jl)
+</div>
 Stages
 ======
-
-[![Build Status](https://travis-ci.org/saltpork/Stage.jl.svg?branch=master)](https://travis-ci.org/saltpork/Stage.jl)
 
 This is a wrapper macro that supplies:
 
