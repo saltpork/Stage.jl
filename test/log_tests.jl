@@ -1,6 +1,7 @@
 using Stage
 
 l = Log(STDERR)
+print_with_color(:red, l.output, "this is red\n")
 @banner l "logging test"
 @error l "error message"
 @debug l "debugging message"
