@@ -55,44 +55,51 @@ function fetch(ckpt :: Checkpoint) # get the value of this checkpoint, mimic rem
   res
 end
 
-function write{T}(file :: IO, ckpt :: Checkpoint, value :: T) # write checkpoint metadata and value to file
-  # write data
-  f = open(ckpt.location, "w")
-  serialize(f, value)
-  close(f)
-
-  # write metadata
-  println(file, strftime(ftime_format, ckpt.date), " ", ckpt.name, " ", ckpt.location)
-  flush(file)
-end
-
 # -------------------------------------------------------------------------------------------------
 # Checkpoint container
 # -------------------------------------------------------------------------------------------------
 type Checkpoints
-  file :: IO
   base :: String
   status :: Dict{String, Checkpoint}
 end
 
 function Checkpoints(dir) 
-  if !isdir(dir) mkdir(dir) end
-  f = open(joinpath(dir, "ckpts"), "a+")
-  seekstart(f)
-  status = (String => Checkpoint)[]
+  ret = Checkpoints(dir, (String=>Checkpoint)[])
+  if isdir(ret.base)
+    read(ret)
+  end
+  return ret
+end
+
+function read(ckpts :: Checkpoints)
+  f = open(joinpath(ckpts.base, "ckpts"), "r")
   for l in eachline(f)
     ckpt = Checkpoint(strip(l))
-    status[ckpt.name] = ckpt
+    ckpts.status[ckpt.name] = ckpt
   end
-  Checkpoints(f, dir, status)
+  close(f)
 end
-close(ckpts :: Checkpoints) = close(ckpts.file)
+
+function write{T}(ckpts :: Checkpoints, ckpt :: Checkpoint, value :: T) # write checkpoint metadata and value to file
+  # write data
+  if !isdir(ckpts.base) mkdir(ckpts.base) end
+  f = open(ckpt.location, "w")
+  serialize(f, value)
+  close(f)
+
+  # write metadata
+  f = open(joinpath(ckpts.base, "ckpts"), "a+")
+  println(f, strftime(ftime_format, ckpt.date), " ", ckpt.name, " ", ckpt.location)
+  flush(f)
+  close(f)
+end
 
 getindex(ckpts :: Checkpoints, key :: String) = ckpts.status[key]
 haskey(ckpts :: Checkpoints, key :: String) = haskey(ckpts.status, key)
+
 function setindex!{T}(ckpts :: Checkpoints, value :: T, key :: String) 
   ckpts.status[key] = Checkpoint(time(), key, joinpath(ckpts.base, key))
-  write(ckpts.file, ckpts.status[key], value)
+  write(ckpts, ckpts.status[key], value)
 end
 
 # -------------------------------------------------------------------------------------------------
