@@ -2,7 +2,7 @@ using Stage
 using Base.Test
 
 ckpts = Checkpoints(".ckpts")
-testdata = { 10, "test-2", { "test" => 1, "test2" => 2 }, [1 2; 3 4] }
+testdata = Any[ 10, "test-2", Dict("test" => 1, "test2" => 2), [1 2; 3 4] ]
 
 logger = Log(STDERR)
 for i = 1:length(testdata)

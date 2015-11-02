@@ -19,33 +19,25 @@ export @expect, @approx
 export @fwrap, @stage
 export getfile
 
-using Datetime
-import Base: fetch, close, write, haskey, merge, print, println
-
-function dt2tm(dt :: DateTime)
-  tmdt = TmStruct(second(dt), minute(dt), hour(dt), day(dt), month(dt)-1, year(dt)-1900,
-                  dayofweek(dt), dayofyear(dt), 0)
-  return time(tmdt)
-end
+import Base: fetch, close, write, haskey, merge, print, println, getindex, setindex!
 
 # -------------------------------------------------------------------------------------------------
 # global date constants
 # -------------------------------------------------------------------------------------------------
-const ftime_format = "%Y-%m-%d %H:%M:%S"
-const date_format  = "yyyy-MM-dd HH:mm:ss"
+const date_format  = "yyyy-mm-dd HH:MM:ss"
 
 # -------------------------------------------------------------------------------------------------
 # Checkpoint stub
 # -------------------------------------------------------------------------------------------------
 type Checkpoint
-  date :: Real
-  name :: String
-  location :: String
+  date :: DateTime
+  name :: AbstractString
+  location :: AbstractString
 end
 
-function Checkpoint(line :: String)
+function Checkpoint(line :: AbstractString)
   dstring, tstring, name, location = split(line, " ")
-  Checkpoint(dt2tm(datetime(date_format, dstring * " " * tstring)), name, location)
+  Checkpoint(DateTime(dstring * " " * tstring, date_format), name, location)
 end
 
 function fetch(ckpt :: Checkpoint) # get the value of this checkpoint, mimic remote refs
@@ -59,12 +51,12 @@ end
 # Checkpoint container
 # -------------------------------------------------------------------------------------------------
 type Checkpoints
-  base :: String
-  status :: Dict{String, Checkpoint}
+  base :: AbstractString
+  status :: Dict{AbstractString, Checkpoint}
 end
 
 function Checkpoints(dir) 
-  ret = Checkpoints(dir, (String=>Checkpoint)[])
+  ret = Checkpoints(dir, Dict{AbstractString, Checkpoint}())
   if isdir(ret.base)
     read(ret)
   end
@@ -89,15 +81,15 @@ function write{T}(ckpts :: Checkpoints, ckpt :: Checkpoint, value :: T) # write 
 
   # write metadata
   f = open(joinpath(ckpts.base, "ckpts"), "a+")
-  println(f, strftime(ftime_format, ckpt.date), " ", ckpt.name, " ", ckpt.location)
+  println(f, Dates.format(ckpt.date, date_format), " ", ckpt.name, " ", ckpt.location)
   flush(f)
   close(f)
 end
 
-getindex(ckpts :: Checkpoints, key :: String) = ckpts.status[key]
-haskey(ckpts :: Checkpoints, key :: String) = haskey(ckpts.status, key)
+getindex(ckpts :: Checkpoints, key :: AbstractString) = ckpts.status[key]
+haskey(ckpts :: Checkpoints, key :: AbstractString) = haskey(ckpts.status, key)
 
-function setindex!{T}(ckpts :: Checkpoints, value :: T, key :: String) 
+function setindex!{T}(ckpts :: Checkpoints, value :: T, key :: AbstractString) 
   ckpts.status[key] = Checkpoint(time(), key, joinpath(ckpts.base, key))
   write(ckpts, ckpts.status[key], value)
 end
@@ -118,7 +110,7 @@ function print!(log :: Log, msg...; color = :normal)
   Base.print_with_color(color, log.output, [ string(x) for x in msg ]...)
 end
 function print(log :: Log, msg...; color = :normal, m_type = "[INFO]")
-  prefix = @sprintf("%-18s %-7s ", strftime(ftime_format, time()), m_type)
+  prefix = @sprintf("%-18s %-7s ", Dates.format(now(), date_format), m_type)
   Base.print_with_color(color, log.output, prefix, [ string(x) for x in msg ]...)
 end
 println(log :: Log, msg...; color = :normal, m_type = "[INFO]") = print(log, msg..., "\n"; color = color, m_type = m_type)
@@ -167,7 +159,8 @@ macro banner(args...)
     error("banner() must be called with either 1 (string) or 2 (log, string) arguments")
   end
   quote
-    residual = int(max(98 - length($(esc(title))), 20) / 2)
+    residual = round(Int, max(98 - length($(esc(title))), 20) / 2)
+    println("resxxxx === " * string(residual))
     println($(esc(log)), "-" ^ residual, " ", $(esc(title)), " ", "-" ^ residual; color = :bold, m_type = "[TITLE]")
   end
 end
@@ -185,7 +178,7 @@ macro test_pass(args...)
     error("test_pass() must be called with either 1 (string) or 2 (log, string) arguments")
   end
   quote
-    residual = int(max(98 - length($(esc(msg))) - 6, 20))
+    residual = round(Int, max(98 - length($(esc(msg))) - 6, 20))
     println($(esc(log)), $(esc(msg)), " " ^ residual, "[PASS]", color = symbol($color), m_type = $tag)
   end
 end
@@ -203,7 +196,7 @@ macro test_fail(args...)
     error("test_fail() must be called with either 1 (string) or 2 (log, string) arguments")
   end
   quote
-    residual = int(max(98 - length($(esc(msg))) - 6, 20))
+    residual = round(Int, max(98 - length($(esc(msg))) - 6, 20))
     println($(esc(log)), $(esc(msg)), " " ^ residual, "[FAIL]", color = symbol($color), m_type = $tag)
   end
 end
@@ -289,7 +282,7 @@ macro stage(fn)
       @info(local_log, @sprintf("%-60s start execution", name))
       $x = 
         if haskey(ckpts, name)
-          @info(local_log, @sprintf("%-60s already completed [%s]", name, strftime(ftime_format, ckpts[name].date)))
+          @info(local_log, @sprintf("%-60s already completed [%s]", name, Dates.format(ckpts[name].date, date_format)))
           @sep(local_log)
           merge(logger, local_log)
           fetch(ckpts[name])
@@ -302,7 +295,7 @@ macro stage(fn)
               @error(local_log, string(" - ERROR: ", r))
             else
               ckpts[name] = r
-              @info(local_log, @sprintf("%-60s completed [%s]", name, strftime(ftime_format, ckpts[name].date)))
+              @info(local_log, @sprintf("%-60s completed [%s]", name, Dates.format(ckpts[name].date, date_format)))
             end
             @sep(local_log)
             merge(logger, local_log)
