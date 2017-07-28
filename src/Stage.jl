@@ -29,7 +29,7 @@ const date_format  = "yyyy-mm-dd HH:MM:SS.sss"
 # -------------------------------------------------------------------------------------------------
 # Checkpoint stub
 # -------------------------------------------------------------------------------------------------
-type Checkpoint
+mutable struct Checkpoint
   date :: DateTime
   name :: AbstractString
   location :: AbstractString
@@ -50,7 +50,7 @@ end
 # -------------------------------------------------------------------------------------------------
 # Checkpoint container
 # -------------------------------------------------------------------------------------------------
-type Checkpoints
+mutable struct Checkpoints
   base :: AbstractString
   status :: Dict{AbstractString, Checkpoint}
 end
