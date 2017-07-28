@@ -24,7 +24,7 @@ import Base: fetch, close, write, haskey, merge, print, println, getindex, setin
 # -------------------------------------------------------------------------------------------------
 # global date constants
 # -------------------------------------------------------------------------------------------------
-const date_format  = "yyyy-mm-dd HH:MM:SS.sss"
+const date_format = "yyyy-mm-dd HH:MM:SS.sss"
 
 # -------------------------------------------------------------------------------------------------
 # Checkpoint stub
@@ -90,7 +90,11 @@ getindex(ckpts :: Checkpoints, key :: AbstractString) = ckpts.status[key]
 haskey(ckpts :: Checkpoints, key :: AbstractString) = haskey(ckpts.status, key)
 
 function setindex!{T}(ckpts :: Checkpoints, value :: T, key :: AbstractString) 
+<<<<<<< HEAD
   ckpts.status[key] = Checkpoint(Dates.now(), key, joinpath(ckpts.base, key))
+=======
+  ckpts.status[key] = Checkpoint(now(), key, joinpath(ckpts.base, key))
+>>>>>>> 925a16c6c7a86d9fd2d4782f8c913b424d040078
   write(ckpts, ckpts.status[key], value)
 end
 
