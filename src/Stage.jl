@@ -24,7 +24,7 @@ import Base: fetch, close, write, haskey, merge, print, println, getindex, setin
 # -------------------------------------------------------------------------------------------------
 # global date constants
 # -------------------------------------------------------------------------------------------------
-const date_format  = "yyyy-mm-dd HH:MM:ss"
+const date_format  = "yyyy-mm-dd HH:MM:SS.sss"
 
 # -------------------------------------------------------------------------------------------------
 # Checkpoint stub
@@ -90,7 +90,7 @@ getindex(ckpts :: Checkpoints, key :: AbstractString) = ckpts.status[key]
 haskey(ckpts :: Checkpoints, key :: AbstractString) = haskey(ckpts.status, key)
 
 function setindex!{T}(ckpts :: Checkpoints, value :: T, key :: AbstractString) 
-  ckpts.status[key] = Checkpoint(time(), key, joinpath(ckpts.base, key))
+  ckpts.status[key] = Checkpoint(Dates.now(), key, joinpath(ckpts.base, key))
   write(ckpts, ckpts.status[key], value)
 end
 
@@ -101,7 +101,7 @@ end
 const LOG_LEVELS = [ ("debug", "cyan"), ("info", "normal"), ("warn", "yellow"), ("error", "red"), ("critical", "blue"), ("success", "green") ]
 LOG_LEVEL = 0
 
-type Log
+struct Log
   output :: IO
 end
 Log() = Log(IOBuffer())
@@ -113,8 +113,14 @@ function print(log :: Log, msg...; color = :normal, m_type = "[INFO]")
   prefix = @sprintf("%-18s %-7s ", Dates.format(now(), date_format), m_type)
   Base.print_with_color(color, log.output, prefix, [ string(x) for x in msg ]...)
 end
-println(log :: Log, msg...; color = :normal, m_type = "[INFO]") = print(log, msg..., "\n"; color = color, m_type = m_type)
-println!(log :: Log, msg...; color = :normal) = print!(log, msg..., "\n"; color = color)
+
+function println(log :: Log, msg...; color = :normal, m_type = "[INFO]")
+  print(log, msg..., "\n"; color = color, m_type = m_type)
+end
+
+function println!(log :: Log, msg...; color = :normal)
+  print!(log, msg..., "\n"; color = color)
+end
 
 macro timer(args...)
   if length(args) == 3
@@ -179,7 +185,7 @@ macro test_pass(args...)
   end
   quote
     residual = round(Int, max(98 - length($(esc(msg))) - 6, 20))
-    println($(esc(log)), $(esc(msg)), " " ^ residual, "[PASS]", color = symbol($color), m_type = $tag)
+    println($(esc(log)), $(esc(msg)), " " ^ residual, "[PASS]", color = Symbol($color), m_type = $tag)
   end
 end
 
@@ -197,14 +203,14 @@ macro test_fail(args...)
   end
   quote
     residual = round(Int, max(98 - length($(esc(msg))) - 6, 20))
-    println($(esc(log)), $(esc(msg)), " " ^ residual, "[FAIL]", color = symbol($color), m_type = $tag)
+    println($(esc(log)), $(esc(msg)), " " ^ residual, "[FAIL]", color = Symbol($color), m_type = $tag)
   end
 end
 
 function merge(l1 :: Log, l2 :: Log)
   seekstart(l2.output)
   for l in readlines(l2.output)
-    print(l1.output, l)
+    println(l1.output, l)
   end
 end
 
@@ -212,7 +218,7 @@ for lvl = 1:length(LOG_LEVELS)
   let level = lvl
     label, col = LOG_LEVELS[level]
     x = quote
-      macro $(symbol(label))(args...)
+      macro $(Symbol(label))(args...)
         tag   = $("[" * uppercase(label[1:min(5, length(label))]) * "]")
         color = $col
         if length(args) == 1
@@ -225,7 +231,7 @@ for lvl = 1:length(LOG_LEVELS)
           error("$label() must be called with either 1 (string) or 2 (log, string) arguments")
         end
         if LOG_LEVEL <= $level
-          :(println($(esc(log)), $(esc(msg)), color = symbol($color), m_type = $tag))
+          :(println($(esc(log)), $(esc(msg)), color = Symbol($color), m_type = $tag))
         else
           :nothing
         end
@@ -270,8 +276,8 @@ macro stage(fn)
 
   call  = fn.args[1]
   body  = fn.args[2]
-  fargs = [ symbol("dead_" * string(sym) * "_beef") for sym in call.args[2:end] ]
-  block = Expr(:block, [ :($sym = fetch($(symbol("dead_" * string(sym) * "_beef")))) for sym in call.args[2:end] ]...)
+  fargs = [ Symbol("dead_" * string(sym) * "_beef") for sym in call.args[2:end] ]
+  block = Expr(:block, [ :($sym = fetch($(Symbol("dead_" * string(sym) * "_beef")))) for sym in call.args[2:end] ]...)
   x     = gensym()
   quote
     #function $(esc(call.args[1]))(name, $(call.args[2:end]...); logger = Log(), ckpts = global_checkpoints)
@@ -317,6 +323,7 @@ end
 # -------------------------------------------------------------------------------------------------
 global_checkpoints = Checkpoints(".ckpts")
 global_log         = Log(STDERR)
+comparisons        = Set([ :>, :<, Symbol("=="), :!=, :<=, :>=, :in, :∉ ])
 
 # -------------------------------------------------------------------------------------------------
 # expect and fuzzy_expect
@@ -331,13 +338,13 @@ macro expect(args...)
   else
     error("expect() must be called with either 1 (expr) or 2 (log, expr) arguments")
   end
-  if expr.head != :comparison
+  if expr.head != :call && length(expr.args) != 3 && expr.args[1] ∉ comparisons
     error("expect() requires that its argument (expr) be a comparison")
   end
 
-  a    = expr.args[1]
+  a    = expr.args[2]
   b    = expr.args[3]
-  nexp = Expr(:comparison, :la, expr.args[2], :lb)
+  nexp = Expr(:call, expr.args[1], :la, :lb)
   sexp = string(expr)
   st   = length(sexp) > 70 ? sexp[1:min(end, 66)] * " ..." : sexp
   quote
