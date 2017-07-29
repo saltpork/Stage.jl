@@ -20,6 +20,10 @@ checkpoint execution.
 
 News
 ----
+
 11/1 -- Last 0.3 version tagged
+
 11/1 -- Initial port to 0.4 passing
+
+7/27 -- ported to 0.6
 
